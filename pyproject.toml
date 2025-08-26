@@ -1,0 +1,22 @@
+[project]
+name = "rocketwave"
+version = "0.1.0"
+description = "Muse 2 neurofeedback: compute Relaxation Index and log/stream to game"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+  { name = "Jacob Kearney" }
+]
+dependencies = [
+  "muselsl==2.3.1",
+  "pylsl==1.16.2",
+  "numpy==1.26.4",
+]
+
+[project.scripts]
+rocketwave-log = "src.relaxation_logger:main"
+
+[tool.uv]
+package = true
+

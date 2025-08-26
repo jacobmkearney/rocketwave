@@ -1,11 +1,19 @@
 # rocketwave
 
-## Quickstart
+## Quickstart (uv)
 
-- Create venv and install deps:
+- Install uv if needed:
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+- Create and use a Python 3.11+ environment, install deps, and lock:
+```bash
+uv python install 3.11
+uv sync
+```
+- Run the logger via the console script:
+```bash
+uv run rocketwave-log
 ```
 
 ## Connect Muse 2 on macOS (muselsl + liblsl)
@@ -38,9 +46,9 @@ muselsl stream --name Muse-XXXX
 
 ## Record a relaxation metric
 
-- In another terminal (with venv activated):
+- In another terminal:
 ```bash
-python relaxation_logger.py
+uv run rocketwave-log
 ```
 - Console shows `RI` (alpha/beta) and `RI_EMA` updates.
 - CSV saved to `logs/session_YYYYMMDD_HHMMSS.csv`.

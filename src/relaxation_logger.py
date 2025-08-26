@@ -3,6 +3,8 @@ import csv
 import time
 from datetime import datetime
 from collections import deque
+import json
+import socket
 
 import numpy as np
 from pylsl import StreamInlet, resolve_byprop
@@ -78,6 +80,18 @@ def main():
     ri_ema = float('nan')
     last_window_time = time.time()
 
+    # UDP bridge (POC): localhost:5005
+    udp_host = '127.0.0.1'
+    udp_port = 5005
+    udp_addr = (udp_host, udp_port)
+    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # Running scaling for RI (EMA) → [0,1]
+    min_ri_ema = 0.8
+    max_ri_ema = 1.2
+
+    def clamp01(x: float) -> float:
+        return 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
+
     try:
         while True:
             sample, ts = inlet.pull_sample(timeout=5.0)
@@ -104,13 +118,34 @@ def main():
                 csv_writer.writerow([datetime.utcnow().isoformat(), f"{alpha:.6f}", f"{beta:.6f}", f"{ri:.6f}", f"{ri_ema:.6f}"])
                 csv_file.flush()
 
-                print(f"RI={ri:.3f}  RI_EMA={ri_ema:.3f}  (alpha={alpha:.4e}, beta={beta:.4e})")
+                # Update running scaling and send UDP JSON
+                min_ri_ema = min(min_ri_ema, ri_ema)
+                max_ri_ema = max(max_ri_ema, ri_ema)
+                ri_scaled = clamp01((ri_ema - min_ri_ema) / (max_ri_ema - min_ri_ema + 1e-6))
+                packet = {
+                    "t": time.time(),
+                    "ri": float(ri),
+                    "ri_ema": float(ri_ema),
+                    "ri_scaled": float(ri_scaled),
+                    "ok": True,
+                }
+                try:
+                    udp_sock.sendto(json.dumps(packet).encode('utf-8'), udp_addr)
+                except Exception as e:
+                    # Non-fatal if Unity not running or port unavailable
+                    pass
+
+                print(f"RI={ri:.3f}  RI_EMA={ri_ema:.3f}  (alpha={alpha:.4e}, beta={beta:.4e})  RI_SCALED={ri_scaled:.3f}")
                 last_window_time = now
 
     except KeyboardInterrupt:
         print("\nStopping...")
     finally:
         csv_file.close()
+        try:
+            udp_sock.close()
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':

@@ -48,7 +48,7 @@ muselsl stream --name Muse-XXXX
 
 - In another terminal:
 ```bash
-uv run rocketwave-log
+PYTHONPATH=. uv run rocketwave-log
 ```
 - Console shows `RI` (alpha/beta) and `RI_EMA` updates.
 - CSV saved to `logs/session_YYYYMMDD_HHMMSS.csv`.

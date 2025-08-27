@@ -19,6 +19,9 @@ public class BackgroundScroller : MonoBehaviour
     private float currentSpeed;
     private float smoothedSpeed;
 
+    // Expose the smoothed, effective scroll speed for HUD readout
+    public float CurrentSpeed => smoothedSpeed;
+
     private void Start()
     {
         currentSpeed = scrollSpeed;

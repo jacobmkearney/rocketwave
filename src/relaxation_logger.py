@@ -48,7 +48,7 @@ def main():
     # Parameters (kept minimal)
     fs_expected = 256.0  # Muse-2 nominal
     window_seconds = 1.0
-    hop_seconds = 0.5
+    hop_seconds = 0.1  # ~10 Hz updates for smoother Unity motion
     window_size = int(fs_expected * window_seconds)
     hop_size = int(fs_expected * hop_seconds)
 

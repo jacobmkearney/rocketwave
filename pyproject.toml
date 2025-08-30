@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 rocketwave-log = "src.relaxation_logger:main"
+visualize-waves = "src.visualize_waves:main"
 
 [tool.uv]
 package = true

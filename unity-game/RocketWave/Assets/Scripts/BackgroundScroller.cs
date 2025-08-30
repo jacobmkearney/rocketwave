@@ -14,6 +14,7 @@ public class BackgroundScroller : MonoBehaviour
     public UdpRelaxationReceiver receiver; // optional: use Relaxation01 to drive speed
     public float speedMin = 0.5f;
     public float speedMax = 8f;
+    public bool invertRelaxation = false;
     [Range(0f, 1f)] public float smoothing = 0.2f; // EMA for speed changes
 
     private float currentSpeed;
@@ -38,6 +39,10 @@ public class BackgroundScroller : MonoBehaviour
         if (useExternalSpeed && receiver != null)
         {
             float r = Mathf.Clamp01(receiver.Relaxation01);
+            if (invertRelaxation)
+            {
+                r = 1f - r;
+            }
             currentSpeed = Mathf.Lerp(speedMin, speedMax, r);
         }
         else

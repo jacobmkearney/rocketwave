@@ -270,7 +270,7 @@ MonoBehaviour:
     m_BestFit: 0
     m_MinSize: 1
     m_MaxSize: 40
-    m_Alignment: 4
+    m_Alignment: 5
     m_AlignByGeometry: 0
     m_RichText: 1
     m_HorizontalOverflow: 0
@@ -685,6 +685,7 @@ MonoBehaviour:
   receiver: {fileID: 2088749865}
   speedMin: 0.5
   speedMax: 8
+  invertRelaxation: 0
   smoothing: 0.409
 --- !u!4 &1603543947
 Transform:
@@ -874,6 +875,7 @@ MonoBehaviour:
   relaxationSlider: {fileID: 0}
   speedUnits: km/h
   decimals: 1
+  displayMultiplier: 1000
 --- !u!114 &2120231055
 MonoBehaviour:
   m_ObjectHideFlags: 0

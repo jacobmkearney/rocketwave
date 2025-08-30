@@ -92,6 +92,9 @@ def main():
     def clamp01(x: float) -> float:
         return 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
 
+    # Initialize start time
+    start_time = time.time()
+
     try:
         while True:
             sample, ts = inlet.pull_sample(timeout=5.0)
@@ -113,14 +116,29 @@ def main():
                 alpha = compute_bandpower_fft(window, fs, *alpha_band)
                 beta = compute_bandpower_fft(window, fs, *beta_band)
                 ri = alpha / (beta + 1e-6)
-                ri_ema = exponential_moving_average(ri_ema, ri, alpha=0.2)
 
-                csv_writer.writerow([datetime.utcnow().isoformat(), f"{alpha:.6f}", f"{beta:.6f}", f"{ri:.6f}", f"{ri_ema:.6f}"])
+                # Apply the low-pass filter
+                def low_pass_filter(current_value, previous_value, smoothing_factor=0.1):
+                    return (1 - smoothing_factor) * previous_value + smoothing_factor * current_value
+
+                ri_filtered = low_pass_filter(ri, ri_ema)
+
+                # Adjust the alpha parameter for more smoothing
+                ri_ema = exponential_moving_average(ri_ema, ri_filtered, alpha=0.1)  # Lower alpha for more smoothing
+
+                # Initialize RI_EMA with the first RI value
+                if np.isnan(ri_ema):
+                    ri_ema = ri
+
+                # Log the elapsed time along with other data
+                elapsed_time = time.time() - start_time
+                csv_writer.writerow([elapsed_time, datetime.utcnow().isoformat(), f"{alpha:.6f}", f"{beta:.6f}", f"{ri:.6f}", f"{ri_ema:.6f}"])
                 csv_file.flush()
 
                 # Update running scaling and send UDP JSON
                 min_ri_ema = min(min_ri_ema, ri_ema)
                 max_ri_ema = max(max_ri_ema, ri_ema)
+                # Ensure no division by zero in RI_SCALED calculation
                 ri_scaled = clamp01((ri_ema - min_ri_ema) / (max_ri_ema - min_ri_ema + 1e-6))
                 packet = {
                     "t": time.time(),

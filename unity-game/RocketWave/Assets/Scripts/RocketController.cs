@@ -8,6 +8,7 @@ public class RocketController : MonoBehaviour
     [Header("Movement")]
     public float vMin = 0.5f;
     public float vMax = 5.0f;
+    public bool invertRelaxation = false;
 
     [Header("Crash Rule")]
     [Range(0f, 1f)] public float crashFloor = 0.2f;
@@ -28,6 +29,10 @@ public class RocketController : MonoBehaviour
     private void Update()
     {
         float r = receiver != null ? receiver.Relaxation01 : 0f;
+        if (invertRelaxation)
+        {
+            r = 1f - r;
+        }
         float vy = Mathf.Lerp(vMin, vMax, r);
         transform.Translate(Vector3.up * vy * Time.deltaTime, Space.World);
 

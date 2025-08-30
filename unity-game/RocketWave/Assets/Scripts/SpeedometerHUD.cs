@@ -12,8 +12,9 @@ public class SpeedometerHUD : MonoBehaviour
     public Slider relaxationSlider; // optional
 
     [Header("Display")]
-    public string speedUnits = "u/s"; // world units per second
+    public string speedUnits = "km/h"; // display units
     public int decimals = 1;
+    public float displayMultiplier = 1000f; // multiply world units to display thousands
 
     private void Start()
     {
@@ -25,7 +26,7 @@ public class SpeedometerHUD : MonoBehaviour
     {
         if (scroller != null && speedText != null)
         {
-            float speed = scroller.CurrentSpeed;
+            float speed = scroller.CurrentSpeed * displayMultiplier;
             string fmt = "F" + Mathf.Clamp(decimals, 0, 3);
             speedText.text = $"Speed: {speed.ToString(fmt)} {speedUnits}";
         }

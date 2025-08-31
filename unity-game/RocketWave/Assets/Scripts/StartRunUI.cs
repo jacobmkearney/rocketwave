@@ -20,6 +20,7 @@ public class StartRunUI : MonoBehaviour
         {
             hud = FindObjectOfType<RunHUD>();
         }
+        Debug.Log($"[StartRunUI] Awake. session set: {session != null}, hud set: {hud != null}, timeInput set: {timeInput != null}");
     }
 
     // Hook this to the Start button's OnClick

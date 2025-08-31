@@ -2209,7 +2209,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   session: {fileID: 0}
-  hud: {fileID: 0}
+  hud: {fileID: 1405821166}
   totalDistanceText: {fileID: 1146612518}
   averageSpeedText: {fileID: 887349211}
   distanceUnits: km

@@ -17,6 +17,10 @@ public class BackgroundScroller : MonoBehaviour
     public bool invertRelaxation = false;
     [Range(0f, 1f)] public float smoothing = 0.2f; // EMA for speed changes
 
+    [Header("Session Gating")]
+    public bool onlyScrollWhenRunning = true; // when true, move only while a run is active
+    public GameSessionManager session; // optional reference; auto-found if left null
+
     private float currentSpeed;
     private float smoothedSpeed;
 
@@ -31,10 +35,19 @@ public class BackgroundScroller : MonoBehaviour
         {
             receiver = FindObjectOfType<UdpRelaxationReceiver>();
         }
+        if (session == null)
+        {
+            session = FindObjectOfType<GameSessionManager>();
+        }
     }
 
     private void Update()
     {
+        // If configured, do not scroll unless a session run is active
+        if (onlyScrollWhenRunning && session != null && !session.IsRunning)
+        {
+            return;
+        }
         // Determine target speed
         if (useExternalSpeed && receiver != null)
         {

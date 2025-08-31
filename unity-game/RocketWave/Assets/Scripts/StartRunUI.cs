@@ -25,6 +25,7 @@ public class StartRunUI : MonoBehaviour
     // Hook this to the Start button's OnClick
     public void OnClickStart()
     {
+        Debug.Log("[StartRunUI] OnClickStart pressed");
         float seconds = session != null ? session.defaultTimeLimitSeconds : 60f;
         if (timeInput != null && !string.IsNullOrEmpty(timeInput.text))
         {
@@ -33,15 +34,29 @@ public class StartRunUI : MonoBehaviour
             {
                 seconds = parsed;
             }
+            else
+            {
+                Debug.LogWarning($"[StartRunUI] Failed to parse time input '{timeInput.text}'. Using default {seconds}s");
+            }
         }
 
         if (session != null)
         {
+            Debug.Log($"[StartRunUI] Starting run for {seconds} seconds");
             session.StartRun(seconds);
+        }
+        else
+        {
+            Debug.LogError("[StartRunUI] No GameSessionManager found; cannot start run");
         }
         if (hud != null)
         {
+            Debug.Log("[StartRunUI] Toggling HUD: OnRunStarted");
             hud.OnRunStarted();
+        }
+        else
+        {
+            Debug.LogWarning("[StartRunUI] No RunHUD reference set; HUD will not toggle");
         }
     }
 }

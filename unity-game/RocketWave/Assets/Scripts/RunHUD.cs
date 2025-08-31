@@ -28,18 +28,17 @@ public class RunHUD : MonoBehaviour
         {
             session = FindObjectOfType<GameSessionManager>();
         }
+        Debug.Log($"[RunHUD] Awake. Session found: {session != null}");
     }
 
-    private void OnEnable()
-    {
-        ShowStart();
-    }
+    // Removed automatic ShowStart in OnEnable to avoid overriding runtime toggles
 
     public void ShowStart()
     {
         if (startPanel != null) startPanel.SetActive(true);
         if (hudPanel != null) hudPanel.SetActive(false);
         if (resultsPanel != null) resultsPanel.SetActive(false);
+        Debug.Log("[RunHUD] ShowStart: startPanel ON, hudPanel OFF, resultsPanel OFF");
     }
 
     public void OnRunStarted()
@@ -47,6 +46,7 @@ public class RunHUD : MonoBehaviour
         if (startPanel != null) startPanel.SetActive(false);
         if (hudPanel != null) hudPanel.SetActive(true);
         if (resultsPanel != null) resultsPanel.SetActive(false);
+        Debug.Log("[RunHUD] OnRunStarted: startPanel OFF, hudPanel ON, resultsPanel OFF");
     }
 
     public void OnRunFinished()
@@ -61,6 +61,7 @@ public class RunHUD : MonoBehaviour
             float avg = session.AverageSpeed * speedDisplayMultiplier;
             avgSpeedText.text = $"Avg: {avg.ToString(fmt)} {speedUnits}";
         }
+        Debug.Log("[RunHUD] OnRunFinished: startPanel OFF, hudPanel OFF, resultsPanel ON");
     }
 
     private void Update()

@@ -63,6 +63,7 @@ public class GameSessionManager : MonoBehaviour
         elapsedTime = 0f;
         totalDistance = 0f;
         isRunning = true;
+        Debug.Log($"[GameSessionManager] Run started for {limit} seconds");
         onRunStarted?.Invoke();
     }
 
@@ -79,6 +80,7 @@ public class GameSessionManager : MonoBehaviour
         }
         isRunning = false;
         timeRemaining = 0f;
+        Debug.Log($"[GameSessionManager] Run finished. Elapsed={elapsedTime:F2}s, Distance={totalDistance:F2} wu, Avg={AverageSpeed:F2} wu/s");
         onRunFinished?.Invoke();
     }
 

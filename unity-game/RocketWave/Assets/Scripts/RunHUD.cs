@@ -89,7 +89,7 @@ public class RunHUD : MonoBehaviour
         {
             string fmt = "F" + Mathf.Clamp(decimals, 0, 3);
             float dist = session.TotalDistance * distanceDisplayMultiplier;
-            distanceText.text = $"Dist: {dist.ToString(fmt)} {distanceUnits}";
+            distanceText.text = $"{dist.ToString(fmt)} {distanceUnits}";
         }
     }
 

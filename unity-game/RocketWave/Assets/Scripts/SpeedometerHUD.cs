@@ -28,7 +28,7 @@ public class SpeedometerHUD : MonoBehaviour
         {
             float speed = scroller.CurrentSpeed * displayMultiplier;
             string fmt = "F" + Mathf.Clamp(decimals, 0, 3);
-            speedText.text = $"Speed: {speed.ToString(fmt)} {speedUnits}";
+            speedText.text = $"{speed.ToString(fmt)} {speedUnits}";
         }
 
         if (receiver != null && relaxationSlider != null)

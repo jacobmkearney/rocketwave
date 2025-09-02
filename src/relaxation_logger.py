@@ -107,7 +107,6 @@ def main():
     alpha_band = (8.0, 12.0)
     beta_band = (13.0, 30.0)
     total_band = (4.0, 45.0)
-    emg_band = (30.0, 45.0)  # crude EMG proxy for artifact guard
 
     inlet = find_eeg_inlet()
     fs = inlet.info().nominal_srate() or fs_expected
@@ -135,21 +134,18 @@ def main():
     ri_ema = float('nan')
     last_window_time = time.time()
     last_ri_scaled = 0.5
-    tau_seconds = 2.0  # EMA time constant
+    tau_seconds = 1.5  # EMA time constant (reduced for faster response)
     ema_alpha = max(0.01, min(0.5, hop_seconds / tau_seconds))
-    artifact_hold_until = 0.0
 
     # UDP bridge (POC): localhost:5005
     udp_host = '127.0.0.1'
     udp_port = 5005
     udp_addr = (udp_host, udp_port)
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # Scaling for RI (EMA) → [0,1] without drifting min/max
-    scaling_gain = 0.25  # larger → slower speed change; tune to taste
+    # Scaling for RI (EMA) → [0,1] using symmetric mapping: (-1 → 0, 0 → 0.5, +1 → 1)
     max_step = 0.05  # cap per-update change in scaled value
 
-    def clamp01(x: float) -> float:
-        return 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
+    # (clamp not needed; we clamp inline below)
 
     # Initialize start time
     start_time = time.time()
@@ -208,23 +204,14 @@ def main():
                 beta_rel = beta_power / (total_af + eps)
                 ri = alpha_rel - beta_rel
 
-                # Simple artifact guard using frontal high-frequency ratio
-                emg_af7 = compute_bandpower_welch(af7, fs, *emg_band, segment_length=seg_len, overlap=overlap)
-                emg_af8 = compute_bandpower_welch(af8, fs, *emg_band, segment_length=seg_len, overlap=overlap)
-                emg_ratio = (0.5 * (emg_af7 + emg_af8)) / (total_af + eps)
-                artifact = emg_ratio > 0.2
-                if artifact:
-                    artifact_hold_until = now + 0.5
-
-                # Update EMA unless in artifact hold
+                # Update EMA continuously
                 if np.isnan(ri_ema):
                     ri_ema = ri
-                elif now >= artifact_hold_until:
+                else:
                     ri_ema = exponential_moving_average(ri_ema, ri, alpha=ema_alpha)
-                # else: hold last ri_ema
 
-                # Scale to [0,1] with gentle gain and capped step
-                desired_scaled = 0.5 + (ri_ema / scaling_gain)
+                # Scale to [0,1] symmetrically: (-1 → 0, 0 → 0.5, +1 → 1)
+                desired_scaled = 0.5 * (ri_ema + 1.0)
                 ri_scaled_raw = 0.0 if desired_scaled < 0.0 else 1.0 if desired_scaled > 1.0 else desired_scaled
                 # Cap per-update change
                 delta = ri_scaled_raw - last_ri_scaled
@@ -264,7 +251,7 @@ def main():
 
                 print(
                     f"RI={ri:.3f}  RI_EMA={ri_ema:.3f}  (alpha_rel={alpha_rel:.3f}, beta_rel={beta_rel:.3f})  "
-                    f"RI_SCALED={ri_scaled:.3f}  ART={'Y' if artifact else 'N'}"
+                    f"RI_SCALED={ri_scaled:.3f}"
                 )
                 last_window_time = now
 

@@ -997,7 +997,7 @@ MonoBehaviour:
   - {fileID: 1986380316}
   tileHeight: 15
   scrollSpeed: 3
-  useExternalSpeed: 0
+  useExternalSpeed: 1
   receiver: {fileID: 0}
   speedMin: 0.5
   speedMax: 8
@@ -2303,7 +2303,7 @@ SpriteRenderer:
   m_SortingLayerID: -1951913891
   m_SortingLayer: 1
   m_SortingOrder: 0
-  m_Sprite: {fileID: 21300000, guid: 45140a1ced83c4353ae3e9549335b3a8, type: 3}
+  m_Sprite: {fileID: 21300000, guid: b55969cc071b34e5cb741d039ccee5cf, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -3149,7 +3149,7 @@ SpriteRenderer:
   m_SortingLayerID: -1951913891
   m_SortingLayer: 1
   m_SortingOrder: 0
-  m_Sprite: {fileID: 21300000, guid: 45140a1ced83c4353ae3e9549335b3a8, type: 3}
+  m_Sprite: {fileID: 21300000, guid: b55969cc071b34e5cb741d039ccee5cf, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -3391,7 +3391,7 @@ SpriteRenderer:
   m_SortingLayerID: -1951913891
   m_SortingLayer: 1
   m_SortingOrder: 0
-  m_Sprite: {fileID: 21300000, guid: 45140a1ced83c4353ae3e9549335b3a8, type: 3}
+  m_Sprite: {fileID: 21300000, guid: b55969cc071b34e5cb741d039ccee5cf, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0

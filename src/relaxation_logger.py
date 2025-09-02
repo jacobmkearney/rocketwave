@@ -142,7 +142,10 @@ def main():
     udp_port = 5005
     udp_addr = (udp_host, udp_port)
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # Scaling for RI (EMA) → [0,1] using symmetric mapping: (-1 → 0, 0 → 0.5, +1 → 1)
+    # Scaling for RI (EMA) → [0,1]
+    # Focus window for sensitivity (maps [low, high] → [0,1] via sine-ease)
+    focus_low = 0.2
+    focus_high = 0.6
     max_step = 0.05  # cap per-update change in scaled value
 
     # (clamp not needed; we clamp inline below)
@@ -210,8 +213,15 @@ def main():
                 else:
                     ri_ema = exponential_moving_average(ri_ema, ri, alpha=ema_alpha)
 
-                # Scale to [0,1] symmetrically: (-1 → 0, 0 → 0.5, +1 → 1)
-                desired_scaled = 0.5 * (ri_ema + 1.0)
+                # Scale to [0,1] using sine-ease over [focus_low, focus_high]
+                # ri_norm in [0,1] → ease = 0.5 - 0.5*cos(pi*ri_norm)
+                denom = max(1e-9, (focus_high - focus_low))
+                ri_norm = (ri_ema - focus_low) / denom
+                if ri_norm < 0.0:
+                    ri_norm = 0.0
+                elif ri_norm > 1.0:
+                    ri_norm = 1.0
+                desired_scaled = 0.5 - 0.5 * np.cos(np.pi * ri_norm)
                 ri_scaled_raw = 0.0 if desired_scaled < 0.0 else 1.0 if desired_scaled > 1.0 else desired_scaled
                 # Cap per-update change
                 delta = ri_scaled_raw - last_ri_scaled

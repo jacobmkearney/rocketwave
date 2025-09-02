@@ -38,13 +38,13 @@ public class ResultsUI : MonoBehaviour
         if (totalDistanceText != null)
         {
             float dist = session.TotalDistance * distanceDisplayMultiplier;
-            totalDistanceText.text = $"Total: {dist.ToString(fmt)} {distanceUnits}";
+            totalDistanceText.text = $"Total distance: {dist.ToString(fmt)} {distanceUnits}";
             Debug.Log($"[ResultsUI] TotalDistance updated: {dist.ToString(fmt)} {distanceUnits}");
         }
         if (averageSpeedText != null)
         {
             float avg = session.AverageSpeed * speedDisplayMultiplier;
-            averageSpeedText.text = $"Avg: {avg.ToString(fmt)} {speedUnits}";
+            averageSpeedText.text = $"Avg speed: {avg.ToString(fmt)} {speedUnits}";
             Debug.Log($"[ResultsUI] AverageSpeed updated: {avg.ToString(fmt)} {speedUnits}");
         }
     }

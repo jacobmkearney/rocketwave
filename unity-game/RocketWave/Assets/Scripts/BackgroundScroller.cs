@@ -14,6 +14,8 @@ public class BackgroundScroller : MonoBehaviour
     public UdpRelaxationReceiver receiver; // optional: use Relaxation01 to drive speed
     public float speedMin = 0.5f;
     public float speedMax = 8f;
+    [Tooltip("Multiply all speeds by this factor (e.g., 1000 for 1000x faster)")]
+    public float speedScale = 1f;
     public bool invertRelaxation = false;
     [Range(0f, 1f)] public float smoothing = 0.2f; // EMA for speed changes
 
@@ -21,16 +23,17 @@ public class BackgroundScroller : MonoBehaviour
     public bool onlyScrollWhenRunning = true; // when true, move only while a run is active
     public GameSessionManager session; // optional reference; auto-found if left null
 
-    private float currentSpeed;
-    private float smoothedSpeed;
+    // Base physical speed that controls visual scroll (unscaled)
+    private float baseSpeed;
+    private float smoothedBaseSpeed;
 
-    // Expose the smoothed, effective scroll speed for HUD readout
-    public float CurrentSpeed => smoothedSpeed;
+    // Expose the logical speed (scaled) for HUD/results, while visuals use unscaled speed
+    public float CurrentSpeed => smoothedBaseSpeed * Mathf.Max(0f, speedScale);
 
     private void Start()
     {
-        currentSpeed = scrollSpeed;
-        smoothedSpeed = scrollSpeed;
+        baseSpeed = scrollSpeed;
+        smoothedBaseSpeed = scrollSpeed;
         if (receiver == null)
         {
             receiver = FindObjectOfType<UdpRelaxationReceiver>();
@@ -48,7 +51,7 @@ public class BackgroundScroller : MonoBehaviour
         {
             return;
         }
-        // Determine target speed
+        // Determine target base (physical) speed; visuals use this, metrics apply speedScale separately
         if (useExternalSpeed && receiver != null)
         {
             float r = Mathf.Clamp01(receiver.Relaxation01);
@@ -56,18 +59,18 @@ public class BackgroundScroller : MonoBehaviour
             {
                 r = 1f - r;
             }
-            currentSpeed = Mathf.Lerp(speedMin, speedMax, r);
+            baseSpeed = Mathf.Lerp(speedMin, speedMax, r);
         }
         else
         {
-            currentSpeed = scrollSpeed;
+            baseSpeed = scrollSpeed;
         }
 
-        // Smooth speed to avoid jitter
-        smoothedSpeed = Mathf.Lerp(smoothedSpeed, currentSpeed, 1f - Mathf.Pow(1f - smoothing, Time.deltaTime * 60f));
+        // Smooth base speed to avoid jitter
+        smoothedBaseSpeed = Mathf.Lerp(smoothedBaseSpeed, baseSpeed, 1f - Mathf.Pow(1f - smoothing, Time.deltaTime * 60f));
 
         // Move layers downward
-        float dy = smoothedSpeed * Time.deltaTime;
+        float dy = smoothedBaseSpeed * Time.deltaTime; // keep visual scroll unchanged by speedScale
         for (int i = 0; i < layers.Length; i++)
         {
             if (layers[i] == null) continue;

@@ -16,6 +16,10 @@ public class GameSessionManager : MonoBehaviour
     [SerializeField] private float elapsedTime = 0f;
     [SerializeField] private float totalDistance = 0f;
 
+    [Header("Units")] 
+    [Tooltip("Meters per world unit. If 1 wu = 1 meter, leave as 1.0")] 
+    public float metersPerWorldUnit = 1f;
+
     [Header("Events")]
     public UnityEvent onRunStarted;
     public UnityEvent onRunFinished;
@@ -24,7 +28,13 @@ public class GameSessionManager : MonoBehaviour
     public float TimeRemaining => timeRemaining;
     public float ElapsedTime => elapsedTime;
     public float TotalDistance => totalDistance;
-    public float AverageSpeed => elapsedTime > 0.001f ? totalDistance / elapsedTime : 0f;
+    // Total distance in meters/kilometers
+    public float TotalDistanceMeters => totalDistance * metersPerWorldUnit;
+    public float TotalDistanceKilometers => TotalDistanceMeters / 1000f;
+
+    // Average speed in m/s and km/h using metersPerWorldUnit
+    public float AverageSpeed => elapsedTime > 0.001f ? (TotalDistanceMeters / elapsedTime) : 0f;
+    public float AverageSpeedKmh => elapsedTime > 0.001f ? (TotalDistanceMeters / elapsedTime) * 3.6f : 0f;
 
     private void Awake()
     {
@@ -48,7 +58,7 @@ public class GameSessionManager : MonoBehaviour
         float dt = Time.deltaTime;
         timeRemaining -= dt;
         elapsedTime += dt;
-        totalDistance += scroller.CurrentSpeed * dt;
+        totalDistance += scroller.CurrentSpeed * dt; // includes speedScale already
 
         if (timeRemaining <= 0f)
         {
@@ -80,7 +90,7 @@ public class GameSessionManager : MonoBehaviour
         }
         isRunning = false;
         timeRemaining = 0f;
-        Debug.Log($"[GameSessionManager] Run finished. Elapsed={elapsedTime:F2}s, Distance={totalDistance:F2} wu, Avg={AverageSpeed:F2} wu/s");
+        Debug.Log($"[GameSessionManager] Run finished. Elapsed={elapsedTime:F2}s, Distance={totalDistance:F2} wu, Avg={AverageSpeedKmh:F2} km/h");
         onRunFinished?.Invoke();
     }
 

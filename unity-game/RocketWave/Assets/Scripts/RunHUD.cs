@@ -16,10 +16,10 @@ public class RunHUD : MonoBehaviour
 
     [Header("Display Settings")]
     public int timeMinWidth = 2;
-    public string distanceUnits = "m";
-    public string speedUnits = "m/s";
-    public float distanceDisplayMultiplier = 1f; // world units to meters (if 1wu=1m use 1)
-    public float speedDisplayMultiplier = 1f;    // multiplier for average speed display
+    public string distanceUnits = "km";
+    public string speedUnits = "km/h";          // match HUD
+    public float distanceDisplayMultiplier = 0.001f; // meters → km via session metersPerWorldUnit
+    public float speedDisplayMultiplier = 1f;        // not used; reading from session
     public int decimals = 1;
 
     private void Awake()
@@ -58,7 +58,7 @@ public class RunHUD : MonoBehaviour
         if (avgSpeedText != null && session != null)
         {
             string fmt = "F" + Mathf.Clamp(decimals, 0, 3);
-            float avg = session.AverageSpeed * speedDisplayMultiplier;
+            float avg = session.AverageSpeedKmh;
             avgSpeedText.text = $"Avg: {avg.ToString(fmt)} {speedUnits}";
         }
         Debug.Log("[RunHUD] OnRunFinished: startPanel OFF, hudPanel OFF, resultsPanel ON");
@@ -88,7 +88,7 @@ public class RunHUD : MonoBehaviour
         if (distanceText != null)
         {
             string fmt = "F" + Mathf.Clamp(decimals, 0, 3);
-            float dist = session.TotalDistance * distanceDisplayMultiplier;
+            float dist = session.TotalDistanceKilometers;
             distanceText.text = $"{dist.ToString(fmt)} {distanceUnits}";
         }
     }

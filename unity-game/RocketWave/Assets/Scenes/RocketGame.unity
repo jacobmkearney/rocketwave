@@ -1001,6 +1001,7 @@ MonoBehaviour:
   receiver: {fileID: 0}
   speedMin: 0.5
   speedMax: 8
+  speedScale: 1000
   invertRelaxation: 0
   smoothing: 0.2
   onlyScrollWhenRunning: 1
@@ -1042,6 +1043,7 @@ MonoBehaviour:
   timeRemaining: 0
   elapsedTime: 0
   totalDistance: 0
+  metersPerWorldUnit: 1
   onRunStarted:
     m_PersistentCalls:
       m_Calls:
@@ -2406,6 +2408,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   scroller: {fileID: 0}
+  session: {fileID: 0}
   receiver: {fileID: 0}
   speedText: {fileID: 1068681009}
   relaxationSlider: {fileID: 0}

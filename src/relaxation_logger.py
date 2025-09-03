@@ -213,15 +213,20 @@ def main():
                 else:
                     ri_ema = exponential_moving_average(ri_ema, ri, alpha=ema_alpha)
 
-                # Scale to [0,1] using sine-ease over [focus_low, focus_high]
-                # ri_norm in [0,1] → ease = 0.5 - 0.5*cos(pi*ri_norm)
+                # Scale to [0,1] with baseline linear mapping, then apply sine-ease only inside focus band
+                # 1) Baseline: map RI_EMA from [-1, +1] to [0, 1]
+                base_linear = 0.5 * (ri_ema + 1.0)
+                if base_linear < 0.0:
+                    base_linear = 0.0
+                elif base_linear > 1.0:
+                    base_linear = 1.0
+                # 2) Sine-ease in focus range, linear outside (prevents collapse to 0)
                 denom = max(1e-9, (focus_high - focus_low))
-                ri_norm = (ri_ema - focus_low) / denom
-                if ri_norm < 0.0:
-                    ri_norm = 0.0
-                elif ri_norm > 1.0:
-                    ri_norm = 1.0
-                desired_scaled = 0.5 - 0.5 * np.cos(np.pi * ri_norm)
+                if base_linear <= focus_low or base_linear >= focus_high:
+                    desired_scaled = base_linear
+                else:
+                    ri_norm = (base_linear - focus_low) / denom
+                    desired_scaled = 0.5 - 0.5 * np.cos(np.pi * ri_norm)
                 ri_scaled_raw = 0.0 if desired_scaled < 0.0 else 1.0 if desired_scaled > 1.0 else desired_scaled
                 # Cap per-update change
                 delta = ri_scaled_raw - last_ri_scaled

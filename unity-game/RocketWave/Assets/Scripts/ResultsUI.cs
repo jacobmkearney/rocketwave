@@ -10,6 +10,8 @@ public class ResultsUI : MonoBehaviour
     [Header("UI Elements")]
     public Text totalDistanceText;
     public Text averageSpeedText;
+    public Text rankText; // "You placed #X of Y overall"
+    public Text leaderboardText; // simple text list for Top 10
 
     [Header("Display Settings")]
     public string distanceUnits = "m";
@@ -48,6 +50,59 @@ public class ResultsUI : MonoBehaviour
             averageSpeedText.text = $"Avg speed: {avg.ToString(fmt)} {speedUnits}";
             Debug.Log($"[ResultsUI] AverageSpeed updated: {avg.ToString(fmt)} {speedUnits}");
         }
+
+        // Auto-save score and update rank/leaderboard
+        AutoSaveAndRefreshLeaderboard();
+    }
+
+    private void AutoSaveAndRefreshLeaderboard()
+    {
+        if (session == null) return;
+        float avg = session.AverageSpeedKmh;
+        float duration = session.ElapsedTime;
+        string name = PlayerPrefs.GetString("player_name", "Player");
+
+        // Add entry and get timestamp to compute rank
+        string ts = LeaderboardManager.AddEntry(name, avg, duration);
+        int rank = LeaderboardManager.GetRankOf(ts);
+        int total = LeaderboardManager.GetTotalEntries();
+
+        if (rankText != null && rank > 0 && total > 0)
+        {
+            rankText.text = $"You placed #{rank} of {total} overall";
+        }
+
+        RefreshLeaderboardList();
+    }
+
+    private void RefreshLeaderboardList()
+    {
+        if (leaderboardText == null) return;
+        var top = LeaderboardManager.GetTop(10);
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < top.Count; i++)
+        {
+            var e = top[i];
+            string line = FormatEntry(i + 1, e.Name, e.AvgKmh, e.DurationSeconds);
+            sb.AppendLine(line);
+        }
+        leaderboardText.text = sb.ToString();
+    }
+
+    private string FormatEntry(int rank, string name, float avgKmh, float durationSeconds)
+    {
+        string fmt = "F" + Mathf.Clamp(decimals, 0, 3);
+        string avgStr = avgKmh.ToString(fmt);
+        string durStr = FormatDuration(durationSeconds);
+        return $"{rank,2}. {name,-12}  {avgStr} {speedUnits}  {durStr}";
+    }
+
+    private static string FormatDuration(float seconds)
+    {
+        seconds = Mathf.Max(0f, seconds);
+        int mm = Mathf.FloorToInt(seconds / 60f);
+        int ss = Mathf.FloorToInt(seconds - mm * 60);
+        return $"{mm.ToString().PadLeft(2, '0')}:{ss.ToString().PadLeft(2, '0')}";
     }
 
     public void OnClickRetry()

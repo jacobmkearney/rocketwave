@@ -5,6 +5,7 @@ public class SpeedometerHUD : MonoBehaviour
 {
     [Header("References")]
     public BackgroundScroller scroller;
+    public GameSessionManager session; // ensure we use the same scroller as session
     public UdpRelaxationReceiver receiver;
 
     [Header("UI Elements")]
@@ -14,11 +15,22 @@ public class SpeedometerHUD : MonoBehaviour
     [Header("Display")]
     public string speedUnits = "km/h"; // display units
     public int decimals = 1;
-    public float displayMultiplier = 1000f; // multiply world units to display thousands
+    public float displayMultiplier = 3.6f; // assume 1 world unit = 1 meter; m/s → km/h
 
     private void Start()
     {
-        if (scroller == null) scroller = FindObjectOfType<BackgroundScroller>();
+        if (session == null) session = FindObjectOfType<GameSessionManager>();
+        if (scroller == null)
+        {
+            if (session != null && session != null)
+            {
+                scroller = session.GetComponent<GameSessionManager>() != null ? session.scroller : null;
+            }
+            if (scroller == null)
+            {
+                scroller = FindObjectOfType<BackgroundScroller>();
+            }
+        }
         if (receiver == null) receiver = FindObjectOfType<UdpRelaxationReceiver>();
     }
 
@@ -26,7 +38,7 @@ public class SpeedometerHUD : MonoBehaviour
     {
         if (scroller != null && speedText != null)
         {
-            float speed = scroller.CurrentSpeed * displayMultiplier;
+            float speed = scroller.CurrentSpeed * 3.6f; // m/s → km/h (includes speedScale already)
             string fmt = "F" + Mathf.Clamp(decimals, 0, 3);
             speedText.text = $"{speed.ToString(fmt)} {speedUnits}";
         }

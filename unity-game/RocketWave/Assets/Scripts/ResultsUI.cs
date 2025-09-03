@@ -13,9 +13,9 @@ public class ResultsUI : MonoBehaviour
 
     [Header("Display Settings")]
     public string distanceUnits = "m";
-    public string speedUnits = "m/s";
-    public float distanceDisplayMultiplier = 1f;
-    public float speedDisplayMultiplier = 1f;
+    public string speedUnits = "km/h"; // match HUD
+    public float distanceDisplayMultiplier = 1f; // 1 wu = 1 m
+    public float speedDisplayMultiplier = 3.6f;  // m/s → km/h
     public int decimals = 1;
 
     private void Awake()
@@ -37,13 +37,14 @@ public class ResultsUI : MonoBehaviour
 
         if (totalDistanceText != null)
         {
-            float dist = session.TotalDistance * distanceDisplayMultiplier;
+            float dist = session.TotalDistanceKilometers; // show km consistently
             totalDistanceText.text = $"Total distance: {dist.ToString(fmt)} {distanceUnits}";
             Debug.Log($"[ResultsUI] TotalDistance updated: {dist.ToString(fmt)} {distanceUnits}");
         }
         if (averageSpeedText != null)
         {
-            float avg = session.AverageSpeed * speedDisplayMultiplier;
+            // Read km/h directly from session to avoid double/mismatched conversions
+            float avg = session.AverageSpeedKmh;
             averageSpeedText.text = $"Avg speed: {avg.ToString(fmt)} {speedUnits}";
             Debug.Log($"[ResultsUI] AverageSpeed updated: {avg.ToString(fmt)} {speedUnits}");
         }

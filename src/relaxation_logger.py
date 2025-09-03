@@ -38,6 +38,57 @@ def compute_bandpower_fft(signal: np.ndarray, fs: float, fmin: float, fmax: floa
     return float(bandpower)
 
 
+def compute_bandpower_welch(signal: np.ndarray, fs: float, fmin: float, fmax: float,
+                            segment_length: int, overlap: int) -> float:
+    """Lightweight Welch bandpower using numpy only.
+
+    - Demeans the signal once to reduce DC leakage
+    - Splits into overlapping segments
+    - Applies Hann window per segment
+    - Averages periodograms, then integrates PSD over [fmin, fmax]
+    """
+    n = signal.size
+    if n == 0 or segment_length <= 0 or segment_length > n:
+        return 0.0
+    step = max(1, segment_length - overlap)
+    if step <= 0:
+        return 0.0
+
+    x = signal - np.mean(signal)
+    window = np.hanning(segment_length)
+    window_norm = np.sum(window ** 2)
+    if window_norm == 0:
+        return 0.0
+
+    # Accumulate PSD across segments
+    num_segments = 0
+    psd_accum = None
+    i = 0
+    while i + segment_length <= n:
+        seg = x[i:i + segment_length]
+        seg = seg - np.mean(seg)
+        seg_win = seg * window
+        fft_vals = np.fft.rfft(seg_win)
+        psd_seg = (np.abs(fft_vals) ** 2) / (fs * window_norm)
+        if psd_accum is None:
+            psd_accum = psd_seg
+        else:
+            psd_accum += psd_seg
+        num_segments += 1
+        i += step
+
+    if num_segments == 0 or psd_accum is None:
+        return 0.0
+
+    psd_avg = psd_accum / num_segments
+    freqs = np.fft.rfftfreq(segment_length, d=1.0 / fs)
+    idx = np.where((freqs >= fmin) & (freqs <= fmax))[0]
+    if idx.size == 0:
+        return 0.0
+    bandpower = np.trapz(psd_avg[idx], freqs[idx])
+    return float(bandpower)
+
+
 def exponential_moving_average(prev: float, new: float, alpha: float = 0.2) -> float:
     if np.isnan(prev):
         return new
@@ -47,7 +98,7 @@ def exponential_moving_average(prev: float, new: float, alpha: float = 0.2) -> f
 def main():
     # Parameters (kept minimal)
     fs_expected = 256.0  # Muse-2 nominal
-    window_seconds = 1.0
+    window_seconds = 2.0  # longer window for more stable power estimates
     hop_seconds = 0.1  # ~10 Hz updates for smoother Unity motion
     window_size = int(fs_expected * window_seconds)
     hop_size = int(fs_expected * hop_seconds)
@@ -55,6 +106,7 @@ def main():
     # Alpha/Beta bands
     alpha_band = (8.0, 12.0)
     beta_band = (13.0, 30.0)
+    total_band = (4.0, 45.0)
 
     inlet = find_eeg_inlet()
     fs = inlet.info().nominal_srate() or fs_expected
@@ -68,29 +120,35 @@ def main():
     csv_path = os.path.join('logs', f'session_{stamp}.csv')
     csv_file = open(csv_path, 'w', newline='')
     csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(['timestamp', 'alpha', 'beta', 'ri', 'ri_ema'])
+    csv_writer.writerow(['elapsed_seconds', 'timestamp_utc', 'alpha_rel', 'beta_rel', 'ri', 'ri_ema', 'ri_scaled'])
     print(f"Logging to {csv_path}")
 
-    # Simple ring buffer for a single channel (use AF7 if available; fall back to ch1)
-    # Muse LSL order is typically: TP9, AF7, AF8, TP10. We'll try AF7 (index 1).
-    channel_index = 1  # AF7
-    buffer = deque(maxlen=window_size)
+    # Ring buffers for all 4 Muse channels
+    # Muse LSL order is typically: TP9, AF7, AF8, TP10
+    tp9_buf = deque(maxlen=window_size)
+    af7_buf = deque(maxlen=window_size)
+    af8_buf = deque(maxlen=window_size)
+    tp10_buf = deque(maxlen=window_size)
 
     # Stats
     ri_ema = float('nan')
     last_window_time = time.time()
+    last_ri_scaled = 0.5
+    tau_seconds = 1.5  # EMA time constant (reduced for faster response)
+    ema_alpha = max(0.01, min(0.5, hop_seconds / tau_seconds))
 
     # UDP bridge (POC): localhost:5005
     udp_host = '127.0.0.1'
     udp_port = 5005
     udp_addr = (udp_host, udp_port)
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # Running scaling for RI (EMA) → [0,1]
-    min_ri_ema = 0.8
-    max_ri_ema = 1.2
+    # Scaling for RI (EMA) → [0,1]
+    # Focus window for sensitivity (maps [low, high] → [0,1] via sine-ease)
+    focus_low = 0.2
+    focus_high = 0.6
+    max_step = 0.05  # cap per-update change in scaled value
 
-    def clamp01(x: float) -> float:
-        return 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
+    # (clamp not needed; we clamp inline below)
 
     # Initialize start time
     start_time = time.time()
@@ -102,44 +160,98 @@ def main():
                 print("No samples received; still waiting...")
                 continue
 
-            if channel_index >= len(sample):
-                # Fall back to first channel if AF7 index is out of range
-                channel_value = sample[0]
-            else:
-                channel_value = sample[channel_index]
-            buffer.append(channel_value)
+            # Fetch channels with fallbacks if stream has fewer than 4 channels
+            ch0 = sample[0] if len(sample) >= 1 else 0.0  # TP9
+            ch1 = sample[1] if len(sample) >= 2 else ch0  # AF7
+            ch2 = sample[2] if len(sample) >= 3 else ch1  # AF8
+            ch3 = sample[3] if len(sample) >= 4 else ch0  # TP10
+
+            tp9_buf.append(ch0)
+            af7_buf.append(ch1)
+            af8_buf.append(ch2)
+            tp10_buf.append(ch3)
 
             # Process at hop cadence
             now = time.time()
-            if len(buffer) == window_size and (now - last_window_time) >= hop_seconds:
-                window = np.array(buffer, dtype=np.float64)
-                alpha = compute_bandpower_fft(window, fs, *alpha_band)
-                beta = compute_bandpower_fft(window, fs, *beta_band)
-                ri = alpha / (beta + 1e-6)
+            if (len(tp9_buf) == window_size and len(af7_buf) == window_size and
+                len(af8_buf) == window_size and len(tp10_buf) == window_size and
+                (now - last_window_time) >= hop_seconds):
+                tp9 = np.array(tp9_buf, dtype=np.float64)
+                af7 = np.array(af7_buf, dtype=np.float64)
+                af8 = np.array(af8_buf, dtype=np.float64)
+                tp10 = np.array(tp10_buf, dtype=np.float64)
 
-                # Apply the low-pass filter
-                def low_pass_filter(current_value, previous_value, smoothing_factor=0.1):
-                    return (1 - smoothing_factor) * previous_value + smoothing_factor * current_value
+                # Welch params: 1s segments with 50% overlap
+                seg_len = int(fs * 1.0)
+                overlap = int(seg_len * 0.5)
 
-                ri_filtered = low_pass_filter(ri, ri_ema)
+                # Bandpowers per channel
+                alpha_tp9 = compute_bandpower_welch(tp9, fs, *alpha_band, segment_length=seg_len, overlap=overlap)
+                alpha_tp10 = compute_bandpower_welch(tp10, fs, *alpha_band, segment_length=seg_len, overlap=overlap)
+                beta_af7 = compute_bandpower_welch(af7, fs, *beta_band, segment_length=seg_len, overlap=overlap)
+                beta_af8 = compute_bandpower_welch(af8, fs, *beta_band, segment_length=seg_len, overlap=overlap)
 
-                # Adjust the alpha parameter for more smoothing
-                ri_ema = exponential_moving_average(ri_ema, ri_filtered, alpha=0.1)  # Lower alpha for more smoothing
+                total_tp9 = compute_bandpower_welch(tp9, fs, *total_band, segment_length=seg_len, overlap=overlap)
+                total_tp10 = compute_bandpower_welch(tp10, fs, *total_band, segment_length=seg_len, overlap=overlap)
+                total_af7 = compute_bandpower_welch(af7, fs, *total_band, segment_length=seg_len, overlap=overlap)
+                total_af8 = compute_bandpower_welch(af8, fs, *total_band, segment_length=seg_len, overlap=overlap)
 
-                # Initialize RI_EMA with the first RI value
+                # Relative powers (average across left/right pairs)
+                alpha_power = 0.5 * (alpha_tp9 + alpha_tp10)
+                beta_power = 0.5 * (beta_af7 + beta_af8)
+                total_tp = 0.5 * (total_tp9 + total_tp10)
+                total_af = 0.5 * (total_af7 + total_af8)
+
+                eps = 1e-9
+                alpha_rel = alpha_power / (total_tp + eps)
+                beta_rel = beta_power / (total_af + eps)
+                ri = alpha_rel - beta_rel
+
+                # Update EMA continuously
                 if np.isnan(ri_ema):
                     ri_ema = ri
+                else:
+                    ri_ema = exponential_moving_average(ri_ema, ri, alpha=ema_alpha)
 
-                # Log the elapsed time along with other data
+                # Scale to [0,1] with baseline linear mapping, then apply sine-ease only inside focus band
+                # 1) Baseline: map RI_EMA from [-1, +1] to [0, 1]
+                base_linear = 0.5 * (ri_ema + 1.0)
+                if base_linear < 0.0:
+                    base_linear = 0.0
+                elif base_linear > 1.0:
+                    base_linear = 1.0
+                # 2) Sine-ease in focus range, linear outside (prevents collapse to 0)
+                denom = max(1e-9, (focus_high - focus_low))
+                if base_linear <= focus_low or base_linear >= focus_high:
+                    desired_scaled = base_linear
+                else:
+                    ri_norm = (base_linear - focus_low) / denom
+                    desired_scaled = 0.5 - 0.5 * np.cos(np.pi * ri_norm)
+                ri_scaled_raw = 0.0 if desired_scaled < 0.0 else 1.0 if desired_scaled > 1.0 else desired_scaled
+                # Cap per-update change
+                delta = ri_scaled_raw - last_ri_scaled
+                if delta > max_step:
+                    ri_scaled = last_ri_scaled + max_step
+                elif delta < -max_step:
+                    ri_scaled = last_ri_scaled - max_step
+                else:
+                    ri_scaled = ri_scaled_raw
+                last_ri_scaled = ri_scaled
+
+                # Log
                 elapsed_time = time.time() - start_time
-                csv_writer.writerow([elapsed_time, datetime.utcnow().isoformat(), f"{alpha:.6f}", f"{beta:.6f}", f"{ri:.6f}", f"{ri_ema:.6f}"])
+                csv_writer.writerow([
+                    elapsed_time,
+                    datetime.utcnow().isoformat(),
+                    f"{alpha_rel:.6f}",
+                    f"{beta_rel:.6f}",
+                    f"{ri:.6f}",
+                    f"{ri_ema:.6f}",
+                    f"{ri_scaled:.6f}",
+                ])
                 csv_file.flush()
 
-                # Update running scaling and send UDP JSON
-                min_ri_ema = min(min_ri_ema, ri_ema)
-                max_ri_ema = max(max_ri_ema, ri_ema)
-                # Ensure no division by zero in RI_SCALED calculation
-                ri_scaled = clamp01((ri_ema - min_ri_ema) / (max_ri_ema - min_ri_ema + 1e-6))
+                # Send UDP JSON
                 packet = {
                     "t": time.time(),
                     "ri": float(ri),
@@ -149,11 +261,13 @@ def main():
                 }
                 try:
                     udp_sock.sendto(json.dumps(packet).encode('utf-8'), udp_addr)
-                except Exception as e:
-                    # Non-fatal if Unity not running or port unavailable
+                except Exception:
                     pass
 
-                print(f"RI={ri:.3f}  RI_EMA={ri_ema:.3f}  (alpha={alpha:.4e}, beta={beta:.4e})  RI_SCALED={ri_scaled:.3f}")
+                print(
+                    f"RI={ri:.3f}  RI_EMA={ri_ema:.3f}  (alpha_rel={alpha_rel:.3f}, beta_rel={beta_rel:.3f})  "
+                    f"RI_SCALED={ri_scaled:.3f}"
+                )
                 last_window_time = now
 
     except KeyboardInterrupt:

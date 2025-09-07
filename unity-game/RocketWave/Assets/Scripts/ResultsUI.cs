@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public class ResultsUI : MonoBehaviour
 {
@@ -10,8 +11,8 @@ public class ResultsUI : MonoBehaviour
     [Header("UI Elements")]
     public Text totalDistanceText;
     public Text averageSpeedText;
-    public Text rankText; // "You placed #X of Y overall"
-    public Text leaderboardText; // simple text list for Top 10
+    public TextMeshProUGUI rankText; // "You placed #X of Y overall"
+    public TextMeshProUGUI leaderboardText; // simple text list for Top 10
 
     [Header("Display Settings")]
     public string distanceUnits = "m";
@@ -19,6 +20,10 @@ public class ResultsUI : MonoBehaviour
     public float distanceDisplayMultiplier = 1f; // 1 wu = 1 m
     public float speedDisplayMultiplier = 3.6f;  // m/s → km/h
     public int decimals = 1;
+
+    [Header("Leaderboard Formatting")]
+    public int nameColumnWidth = 14;   // characters
+    public int speedColumnWidth = 8;   // characters for numeric avg (before units)
 
     private void Awake()
     {
@@ -80,13 +85,18 @@ public class ResultsUI : MonoBehaviour
         if (leaderboardText == null) return;
         var top = LeaderboardManager.GetTop(10);
         var sb = new System.Text.StringBuilder();
+
+        // Bold header row
+        string header = BuildLeaderboardHeader();
+        sb.AppendLine(header);
         for (int i = 0; i < top.Count; i++)
         {
             var e = top[i];
             string line = FormatEntry(i + 1, e.Name, e.AvgKmh, e.DurationSeconds);
             sb.AppendLine(line);
         }
-        leaderboardText.text = sb.ToString();
+        // Monospace block so padded columns align even with proportional fonts
+        leaderboardText.text = $"<mspace=0.6em>{sb.ToString()}</mspace>";
     }
 
     private string FormatEntry(int rank, string name, float avgKmh, float durationSeconds)
@@ -94,7 +104,28 @@ public class ResultsUI : MonoBehaviour
         string fmt = "F" + Mathf.Clamp(decimals, 0, 3);
         string avgStr = avgKmh.ToString(fmt);
         string durStr = FormatDuration(durationSeconds);
-        return $"{rank,2}. {name,-12}  {avgStr} {speedUnits}  {durStr}";
+        string rankStr = rank.ToString().PadLeft(2, ' ');
+        string nameStr = TruncateAndPadRight(name, nameColumnWidth);
+        string avgAligned = avgStr.PadLeft(speedColumnWidth, ' ');
+        return $"{rankStr}. {nameStr}  {avgAligned} {speedUnits}  {durStr}";
+    }
+
+    private string BuildLeaderboardHeader()
+    {
+        string rankHdr = "#".PadLeft(2, ' ');
+        string nameHdr = TruncateAndPadRight("Name", nameColumnWidth);
+        string avgHdr = "Avg".PadLeft(speedColumnWidth, ' ');
+        return $"<b>{rankHdr}. {nameHdr}  {avgHdr} {speedUnits}  Time</b>";
+    }
+
+    private static string TruncateAndPadRight(string value, int width)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return new string(' ', width);
+        }
+        string truncated = value.Length > width ? value.Substring(0, width) : value;
+        return truncated.PadRight(width, ' ');
     }
 
     private static string FormatDuration(float seconds)

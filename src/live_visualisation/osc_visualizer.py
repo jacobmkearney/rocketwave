@@ -110,8 +110,14 @@ class OSCDataPlotter:
         # Determine dimensionality from the most recent sample
         buf = self.buffers.get(self.current_address, deque())
         num_values = len(buf[-1][1]) if len(buf) > 0 else 1
+        # Choose per-channel labels. For /muse/eeg use TP9, AF7, AF8, TP10.
+        labels = [f"value[{i}]"] * num_values
+        if self.current_address == '/muse/eeg':
+            muse_labels = ['TP9', 'AF7', 'AF8', 'TP10']
+            labels = [muse_labels[i] if i < len(muse_labels) else f"value[{i}]"]
         for i in range(num_values):
-            plot = pg.PlotWidget(title=f"{self.current_address} — value[{i}]")
+            title = f"{self.current_address} — {labels[i]}"
+            plot = pg.PlotWidget(title=title)
             plot.setLabel('bottom', 'Time (s)')
             plot.setLabel('left', 'Value')
             curve = plot.plot(pen=pg.mkPen(pg.intColor(i, 10)))

@@ -1,4 +1,5 @@
 import sys
+import argparse
 import threading
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
@@ -111,10 +112,10 @@ class OSCDataPlotter:
         buf = self.buffers.get(self.current_address, deque())
         num_values = len(buf[-1][1]) if len(buf) > 0 else 1
         # Choose per-channel labels. For /muse/eeg use TP9, AF7, AF8, TP10.
-        labels = [f"value[{i}]"] * num_values
+        labels = [f"value[{k}]" for k in range(num_values)]
         if self.current_address == '/muse/eeg':
             muse_labels = ['TP9', 'AF7', 'AF8', 'TP10']
-            labels = [muse_labels[i] if i < len(muse_labels) else f"value[{i}]"]
+            labels = [muse_labels[k] if k < len(muse_labels) else f"value[{k}]" for k in range(num_values)]
         for i in range(num_values):
             title = f"{self.current_address} — {labels[i]}"
             plot = pg.PlotWidget(title=title)
@@ -174,8 +175,13 @@ class OSCDataPlotter:
 
 
 def main():
+    parser = argparse.ArgumentParser(description='OSC visualizer for Muse endpoints')
+    parser.add_argument('--ip', default='127.0.0.1', help='IP to bind (default: 127.0.0.1)')
+    parser.add_argument('--port', type=int, default=7000, help='OSC listen port (default: 7000)')
+    args = parser.parse_args()
+
     app = QApplication(sys.argv)
-    plotter = OSCDataPlotter(port=7000)
+    plotter = OSCDataPlotter(ip=args.ip, port=args.port)
     sys.exit(app.exec())
 
 

@@ -53,6 +53,39 @@ PYTHONPATH=. uv run rocketwave-log
 - Console shows `RI` (alpha/beta) and `RI_EMA` updates.
 - CSV saved to `logs/session_YYYYMMDD_HHMMSS.csv`.
 
+## Live visualization (OSC + PyQt)
+
+- Prerequisites: follow "Connect Muse 2 on macOS" to start the LSL stream first.
+  - Terminal A:
+```bash
+muselsl stream
+```
+
+- Start the bridge that computes bandpowers and emits Muse-style OSC endpoints:
+  - Terminal B:
+```bash
+uv run rocketwave-live --osc-port 7000 --send-raw-eeg
+# No headset? Simulate a signal instead:
+uv run rocketwave-live --osc-port 7000 --simulate --send-raw-eeg
+```
+  - Exposed OSC addresses (examples):
+    - `/muse/eeg` → 4 floats: TP9, AF7, AF8, TP10 (only if `--send-raw-eeg`)
+    - `/muse/elements/{delta,theta,alpha,beta,gamma}_relative`
+    - `/muse/elements/{delta,theta,alpha,beta,gamma}_absolute`
+  - Also sends UDP JSON for Unity on port 5005 with fields: `ri`, `ri_ema`, `ri_scaled`.
+
+- Launch the visualizer UI and pick any OSC address from the dropdown:
+  - Terminal C:
+```bash
+uv run rocketwave-visual
+```
+  - Use the Time Range spinner to adjust the window.
+  - Click "Save Data" to export the currently selected stream to CSV.
+
+- Ports and flags:
+  - OSC default: `127.0.0.1:7000` (override with `--osc-port`).
+  - Unity UDP default: `127.0.0.1:5005` (override with `--udp-port`).
+
 ## Troubleshooting
 
 - Error about missing LSL binary: install via Homebrew (above) and set `DYLD_LIBRARY_PATH`.

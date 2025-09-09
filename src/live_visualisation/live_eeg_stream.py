@@ -180,7 +180,6 @@ def run_bridge(cfg: BridgeConfig) -> None:
     last_ri_scaled = 0.5
     tau_seconds = 1.5
     ema_alpha = max(0.01, min(0.5, cfg.hop_seconds / tau_seconds))
-    focus_low, focus_high = 0.2, 0.6
     max_step = 0.05
 
     start_time = time.time()
@@ -272,13 +271,17 @@ def run_bridge(cfg: BridgeConfig) -> None:
                     ri_ema = exponential_moving_average(ri_ema, ri, alpha=ema_alpha)
                 base_linear = 0.5 * (ri_ema + 1.0)
                 base_linear = 0.0 if base_linear < 0.0 else 1.0 if base_linear > 1.0 else base_linear
-                denom = max(1e-9, (focus_high - focus_low))
-                if base_linear <= focus_low or base_linear >= focus_high:
-                    desired_scaled = base_linear
-                else:
-                    ri_norm = (base_linear - focus_low) / denom
-                    desired_scaled = 0.5 - 0.5 * math.cos(math.pi * ri_norm)
-                ri_scaled_raw = max(0.0, min(1.0, desired_scaled))
+                # Apply mid-boost sensitivity in base_linear ∈ (0.35, 0.50)
+                x = base_linear
+                a = 0.35
+                b = 0.50
+                if x > a and x < b:
+                    c = 0.5 * (a + b)
+                    t = (x - a) / (b - a)
+                    f = 4.0 * t * (1.0 - t)
+                    k = 1.5
+                    x = x + k * (x - c) * f
+                ri_scaled_raw = max(0.0, min(1.0, x))
                 delta_val = ri_scaled_raw - last_ri_scaled
                 if delta_val > max_step:
                     ri_scaled = last_ri_scaled + max_step

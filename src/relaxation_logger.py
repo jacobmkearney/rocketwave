@@ -142,11 +142,8 @@ def main():
     udp_port = 5005
     udp_addr = (udp_host, udp_port)
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # Scaling for RI (EMA) → [0,1]
-    # Focus window for sensitivity (maps [low, high] → [0,1] via sine-ease)
-    focus_low = 0.2
-    focus_high = 0.6
-    max_step = 0.05  # cap per-update change in scaled value
+    # Scaling for RI (EMA) → [0,1] using linear mapping for full range
+    max_step = 0.2  # larger cap per-update change for higher responsiveness
 
     # (clamp not needed; we clamp inline below)
 
@@ -213,21 +210,25 @@ def main():
                 else:
                     ri_ema = exponential_moving_average(ri_ema, ri, alpha=ema_alpha)
 
-                # Scale to [0,1] with baseline linear mapping, then apply sine-ease only inside focus band
-                # 1) Baseline: map RI_EMA from [-1, +1] to [0, 1]
+                # Scale to [0,1] with linear mapping
                 base_linear = 0.5 * (ri_ema + 1.0)
                 if base_linear < 0.0:
                     base_linear = 0.0
                 elif base_linear > 1.0:
                     base_linear = 1.0
-                # 2) Sine-ease in focus range, linear outside (prevents collapse to 0)
-                denom = max(1e-9, (focus_high - focus_low))
-                if base_linear <= focus_low or base_linear >= focus_high:
-                    desired_scaled = base_linear
-                else:
-                    ri_norm = (base_linear - focus_low) / denom
-                    desired_scaled = 0.5 - 0.5 * np.cos(np.pi * ri_norm)
-                ri_scaled_raw = 0.0 if desired_scaled < 0.0 else 1.0 if desired_scaled > 1.0 else desired_scaled
+
+                # Mid-boost sensitivity for base_linear in [0.35, 0.50] (RI_EMA ≈ [-0.3, 0])
+                x = base_linear
+                a = 0.35
+                b = 0.50
+                if x > a and x < b:
+                    c = 0.5 * (a + b)
+                    t = (x - a) / (b - a)
+                    f = 4.0 * t * (1.0 - t)  # 0 at edges, 1 at center
+                    k = 1.5  # boost factor (slope at center becomes 1+k)
+                    x = x + k * (x - c) * f
+                # Final clamp to [0,1]
+                ri_scaled_raw = 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
                 # Cap per-update change
                 delta = ri_scaled_raw - last_ri_scaled
                 if delta > max_step:

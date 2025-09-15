@@ -34,14 +34,14 @@ export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
 - Do NOT pair the Muse in macOS; let muselsl connect directly.
 - Start the EEG stream (approve Bluetooth permission on first run):
 ```bash
-muselsl list | cat
-muselsl stream
+uv run muselsl list | cat
+uv run muselsl stream
 ```
 - If multiple headsets are nearby, connect explicitly:
 ```bash
-muselsl stream --address XX:XX:XX:XX:XX:XX
+uv run muselsl stream --address XX:XX:XX:XX:XX:XX
 # or
-muselsl stream --name Muse-XXXX
+uv run muselsl stream --name Muse-XXXX
 ```
 
 ## Record a relaxation metric
@@ -53,12 +53,25 @@ PYTHONPATH=. uv run rocketwave-log
 - Console shows `RI` (alpha/beta) and `RI_EMA` updates.
 - CSV saved to `logs/session_YYYYMMDD_HHMMSS.csv`.
 
+### Compare or analyze saved logs
+
+- Compare multiple sessions or export a figure/GIF with the helper CLI:
+```bash
+uv run visualize-waves \
+  --input logs/session_20250101_120000.csv:Baseline \
+  --input logs/session_20250102_120000.csv:Training \
+  --metric ri_scaled --x duration --save logs/compare.png
+```
+- Notes:
+  - `--input` accepts `PATH` or `PATH:LABEL` and can be repeated.
+  - Use `--animate logs/progression.gif` to export an animated reveal (requires Pillow: `uv pip install pillow`).
+
 ## Live visualization (OSC + PyQt)
 
 - Prerequisites: follow "Connect Muse 2 on macOS" to start the LSL stream first.
   - Terminal A:
 ```bash
-muselsl stream
+uv run muselsl stream
 ```
 
 - Start the bridge that computes bandpowers and emits Muse-style OSC endpoints:
@@ -77,7 +90,7 @@ uv run rocketwave-live --osc-port 7000 --simulate --send-raw-eeg
 - Launch the visualizer UI and pick any OSC address from the dropdown:
   - Terminal C:
 ```bash
-uv run rocketwave-visual
+uv run rocketwave-visual --port 7000
 ```
   - Use the Time Range spinner to adjust the window.
   - Click "Save Data" to export the currently selected stream to CSV.
@@ -86,7 +99,16 @@ uv run rocketwave-visual
   - OSC default: `127.0.0.1:7000` (override with `--osc-port`).
   - Unity UDP default: `127.0.0.1:5005` (override with `--udp-port`).
 
+## Unity game (Build & Run)
+
+- Open the Unity project at `unity-game/RocketWave` in Unity Hub.
+- Recommended/authoring version: Unity 2022.3.62f1 (LTS). Newer 2022 LTS may also work.
+- Ensure the live bridge is running (see above) so the game can receive UDP JSON on port 5005.
+- In Unity: File → Build And Run (macOS). The app should launch and react to the relaxation index.
+
 ## Troubleshooting
 
 - Error about missing LSL binary: install via Homebrew (above) and set `DYLD_LIBRARY_PATH`.
 - Toggle Bluetooth, power-cycle the Muse, or specify `--address` if discovery fails.
+- If the OSC visualizer fails to start due to a Qt platform plugin error, ensure PyQt6 is installed in the uv environment: `uv pip install --upgrade PyQt6`.
+- If a port is already in use, change it with `--osc-port` (visualizer and bridge) or `--udp-port` (Unity JSON) and keep the settings consistent across tools.

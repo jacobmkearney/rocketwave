@@ -134,19 +134,16 @@ def main():
     ri_ema = float('nan')
     last_window_time = time.time()
     last_ri_scaled = 0.5
-    tau_seconds = 1.5  # EMA time constant (reduced for faster response)
-    ema_alpha = max(0.01, min(0.5, hop_seconds / tau_seconds))
+    tau_seconds = 0.5  # faster EMA time constant for higher responsiveness
+    ema_alpha = max(0.05, min(0.5, hop_seconds / tau_seconds))
 
     # UDP bridge (POC): localhost:5005
     udp_host = '127.0.0.1'
     udp_port = 5005
     udp_addr = (udp_host, udp_port)
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # Scaling for RI (EMA) → [0,1]
-    # Focus window for sensitivity (maps [low, high] → [0,1] via sine-ease)
-    focus_low = 0.2
-    focus_high = 0.6
-    max_step = 0.05  # cap per-update change in scaled value
+    # Scaling for RI (EMA) → [0,1] using linear mapping for full range
+    max_step = 0.5  # allow larger per-update changes
 
     # (clamp not needed; we clamp inline below)
 
@@ -220,14 +217,17 @@ def main():
                     base_linear = 0.0
                 elif base_linear > 1.0:
                     base_linear = 1.0
-                # 2) Sine-ease in focus range, linear outside (prevents collapse to 0)
-                denom = max(1e-9, (focus_high - focus_low))
-                if base_linear <= focus_low or base_linear >= focus_high:
-                    desired_scaled = base_linear
-                else:
-                    ri_norm = (base_linear - focus_low) / denom
-                    desired_scaled = 0.5 - 0.5 * np.cos(np.pi * ri_norm)
-                ri_scaled_raw = 0.0 if desired_scaled < 0.0 else 1.0 if desired_scaled > 1.0 else desired_scaled
+
+                # Monotonic logistic re-map centered near mid (x≈0.425) to increase mid sensitivity
+                x = base_linear
+                center = 0.425
+                s = 12.0  # steepness
+                sig = 1.0 / (1.0 + np.exp(-s * (x - center)))
+                sig0 = 1.0 / (1.0 + np.exp(-s * (0.0 - center)))
+                sig1 = 1.0 / (1.0 + np.exp(-s * (1.0 - center)))
+                x = (sig - sig0) / (sig1 - sig0)
+                # Final clamp to [0,1]
+                ri_scaled_raw = 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
                 # Cap per-update change
                 delta = ri_scaled_raw - last_ri_scaled
                 if delta > max_step:

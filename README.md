@@ -55,7 +55,7 @@ uv run muselsl stream --name Muse-XXXX
 ```bash
 PYTHONPATH=. uv run rocketwave-log
 ```
-- Console shows `RI` (alpha/beta) and `RI_EMA` updates.
+- Console shows `RI_SCALED` updates at 10hz.
 - CSV saved to `logs/session_YYYYMMDD_HHMMSS.csv`.
 
 ### Compare or analyze saved logs
@@ -69,7 +69,7 @@ uv run visualize-waves \
 ```
 - Notes:
   - `--input` accepts `PATH` or `PATH:LABEL` and can be repeated.
-  - Use `--animate logs/progression.gif` to export an animated reveal (requires Pillow: `uv pip install pillow`).
+  - Use `--animate logs/progression.gif` to export an animated line graph gif (requires Pillow: `uv pip install pillow`).
 
 ## Live visualization (OSC + PyQt)
 
@@ -83,22 +83,18 @@ uv run muselsl stream
   - Terminal B:
 ```bash
 uv run rocketwave-live --osc-port 7000 --send-raw-eeg
-# No headset? Simulate a signal instead:
+# if you want to explore this without a headset, you can run this to simulate.
 uv run rocketwave-live --osc-port 7000 --simulate --send-raw-eeg
 ```
   - Exposed OSC addresses (examples):
     - `/muse/eeg` → 4 floats: TP9, AF7, AF8, TP10 (only if `--send-raw-eeg`)
     - `/muse/elements/{delta,theta,alpha,beta,gamma}_relative`
     - `/muse/elements/{delta,theta,alpha,beta,gamma}_absolute`
-  - Also sends UDP JSON for Unity on port 5005 with fields: `ri`, `ri_ema`, `ri_scaled`.
 
-- Launch the visualizer UI and pick any OSC address from the dropdown:
   - Terminal C:
 ```bash
 uv run rocketwave-visual --port 7000
 ```
-  - Use the Time Range spinner to adjust the window.
-  - Click "Save Data" to export the currently selected stream to CSV.
 
 - Ports and flags:
   - OSC default: `127.0.0.1:7000` (override with `--osc-port`).
@@ -106,6 +102,7 @@ uv run rocketwave-visual --port 7000
 
 ## Unity game (Build & Run)
 
+- Ensure you have the relaxation logger running, you should see RI_SCALED values on your terminal.
 - Open the Unity project at `unity-game/RocketWave` in Unity Hub.
 - Recommended/authoring version: Unity 2022.3.62f1 (LTS). Newer 2022 LTS may also work.
 - Ensure the live bridge is running (see above) so the game can receive UDP JSON on port 5005.

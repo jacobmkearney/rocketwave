@@ -1,5 +1,10 @@
 # rocketwave
 
+### Demo and guide
+
+- YouTube: [RocketWave neurogame demo](https://www.youtube.com/watch?v=7Ba41e3u-K0)
+- Medium: [How to build your own neurogame using the Muse 2 headset](https://medium.com/@jacobmkearney/how-to-build-your-own-neurogame-using-the-muse2-headset-60c370b767a4)
+
 ## Quickstart (uv)
 
 - Install uv if needed:

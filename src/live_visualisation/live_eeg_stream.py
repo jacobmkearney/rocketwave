@@ -11,74 +11,46 @@ from typing import Deque, Optional, Tuple
 import numpy as np
 from pylsl import StreamInlet, resolve_byprop
 
+from utils.utils import find_eeg_inlet, compute_bandpower_welch, exponential_moving_average
+
 try:
     from pythonosc.udp_client import SimpleUDPClient as OscUDPClient
 except Exception:
-    OscUDPClient = None  # type: ignore
+    OscUDPClient = None
 
 
-def find_eeg_inlet(timeout_seconds: float = 10.0) -> StreamInlet:
-    print("Resolving LSL EEG stream (run 'muselsl stream' in another terminal if needed)...")
-    streams = resolve_byprop('type', 'EEG', timeout=timeout_seconds)
-    if len(streams) == 0:
-        raise RuntimeError("No EEG LSL stream found. Did you run 'muselsl stream'? Is Muse on?")
-    inlet = StreamInlet(streams[0], max_buflen=60)
-    info = inlet.info()
-    print(f"Connected to stream: name={info.name()}, type={info.type()}, fs={info.nominal_srate()} Hz, ch={info.channel_count()}")
-    return inlet
-
-
-def compute_bandpower_welch(signal: np.ndarray, fs: float, fmin: float, fmax: float,
-                            segment_length: int, overlap: int) -> float:
-    n = signal.size
-    if n == 0 or segment_length <= 0 or segment_length > n:
-        return 0.0
-    step = max(1, segment_length - overlap)
-    if step <= 0:
-        return 0.0
-
-    x = signal - np.mean(signal)
-    window = np.hanning(segment_length)
-    window_norm = np.sum(window ** 2)
-    if window_norm == 0:
-        return 0.0
-
-    num_segments = 0
-    psd_accum = None
-    i = 0
-    while i + segment_length <= n:
-        seg = x[i:i + segment_length]
-        seg = seg - np.mean(seg)
-        seg_win = seg * window
-        fft_vals = np.fft.rfft(seg_win)
-        psd_seg = (np.abs(fft_vals) ** 2) / (fs * window_norm)
-        if psd_accum is None:
-            psd_accum = psd_seg
-        else:
-            psd_accum += psd_seg
-        num_segments += 1
-        i += step
-
-    if num_segments == 0 or psd_accum is None:
-        return 0.0
-
-    psd_avg = psd_accum / num_segments
-    freqs = np.fft.rfftfreq(segment_length, d=1.0 / fs)
-    idx = np.where((freqs >= fmin) & (freqs <= fmax))[0]
-    if idx.size == 0:
-        return 0.0
-    bandpower = np.trapz(psd_avg[idx], freqs[idx])
-    return float(bandpower)
-
-
-def exponential_moving_average(prev: float, new: float, alpha: float) -> float:
-    if math.isnan(prev):
-        return new
-    return (1.0 - alpha) * prev + alpha * new
+ 
 
 
 @dataclass
 class BridgeConfig:
+    """Configuration for the live EEG bridge.
+
+    Attributes
+    ----------
+    osc_ip : str
+        Destination IP for OSC messages.
+    osc_port : int
+        Destination port for OSC messages.
+    udp_ip : str
+        Destination IP for the Unity UDP JSON channel.
+    udp_port : int
+        Destination port for the Unity UDP JSON channel.
+    window_seconds : float
+        Sliding analysis window duration used for bandpower.
+    hop_seconds : float
+        Hop between processing windows; controls update rate and smoothing.
+    send_raw_eeg : bool
+        If True, forwards last raw EEG sample via OSC /muse/eeg for debugging.
+    enable_osc : bool
+        Enables OSC output.
+    enable_udp : bool
+        Enables UDP JSON output for Unity.
+    log_csv : bool
+        If True, writes summary metrics to a CSV in `logs/`.
+    simulate : bool
+        If True, runs a synthetic EEG generator instead of LSL input.
+    """
     osc_ip: str = '127.0.0.1'
     osc_port: int = 7000
     udp_ip: str = '127.0.0.1'
@@ -147,14 +119,85 @@ def _simulate_window(fs: float, n: int, t0: float) -> Tuple[np.ndarray, np.ndarr
     return tp9, af7, af8, tp10, t[-1] + (1.0 / fs)
 
 
+def _simulate_step(
+    cfg: 'BridgeConfig',
+    fs: float,
+    hop_size: int,
+    sim_t0: float,
+    tp9_buf: Deque[float],
+    af7_buf: Deque[float],
+    af8_buf: Deque[float],
+    tp10_buf: Deque[float],
+    osc_client,
+) -> float:
+    """
+    Advance one simulate-mode step by generating and buffering synthetic EEG.
+
+
+    Returns
+    -------
+    float
+        Updated simulation time origin for the next call.
+    """
+    tp9, af7, af8, tp10, sim_t0 = _simulate_window(fs, hop_size, sim_t0)
+    tp9_buf.extend(tp9.tolist())
+    af7_buf.extend(af7.tolist())
+    af8_buf.extend(af8.tolist())
+    tp10_buf.extend(tp10.tolist())
+    if cfg.enable_osc and cfg.send_raw_eeg and tp9.size > 0:
+        _send_osc(osc_client, '/muse/eeg', tp9[-1], af7[-1], af8[-1], tp10[-1])
+    time.sleep(cfg.hop_seconds)
+    return sim_t0
+
+
+def _step(
+    cfg: 'BridgeConfig',
+    inlet: StreamInlet,
+    tp9_buf: Deque[float],
+    af7_buf: Deque[float],
+    af8_buf: Deque[float],
+    tp10_buf: Deque[float],
+    osc_client,
+) -> None:
+    """
+    Advance one real-input step by pulling an LSL sample and buffering it.
+    """
+    sample, ts = inlet.pull_sample(timeout=5.0)
+    if sample is None:
+        return
+    ch0 = sample[0] if len(sample) >= 1 else 0.0
+    ch1 = sample[1] if len(sample) >= 2 else ch0
+    ch2 = sample[2] if len(sample) >= 3 else ch1
+    ch3 = sample[3] if len(sample) >= 4 else ch0
+
+    tp9_buf.append(ch0)
+    af7_buf.append(ch1)
+    af8_buf.append(ch2)
+    tp10_buf.append(ch3)
+
+    # Optional raw EEG export helps with quick debugging.
+    if cfg.enable_osc and cfg.send_raw_eeg:
+        _send_osc(osc_client, '/muse/eeg', ch0, ch1, ch2, ch3)
+
+
 def run_bridge(cfg: BridgeConfig) -> None:
+    """Run the live EEG bridge.
+
+    Orchestrates acquisition (real vs. simulated), computes bandpowers via
+    Welch's method, emits OSC and UDP outputs, and optionally logs to CSV.
+
+    Parameters
+    ----------
+    cfg : BridgeConfig
+        Configuration controlling I/O, timing, and simulation.
+    """
     fs_expected = 256.0
     window_size = int(fs_expected * cfg.window_seconds)
     hop_size = int(fs_expected * cfg.hop_seconds)
     if hop_size <= 0:
+        # Ensure forward progress if input is negative
         hop_size = 1
 
-    # Bands (Mind Monitor friendly)
     delta_band = (1.0, 4.0)
     theta_band = (4.0, 8.0)
     alpha_band = (8.0, 12.0)
@@ -179,8 +222,11 @@ def run_bridge(cfg: BridgeConfig) -> None:
     ri_ema = float('nan')
     last_ri_scaled = 0.5
     tau_seconds = 1.5
+    # EMA smoothing factor tied to hop cadence; bounds avoid over/under reaction.
     ema_alpha = max(0.01, min(0.5, cfg.hop_seconds / tau_seconds))
+    # Apply cosine ease on mid-range to improve sensitivity
     focus_low, focus_high = 0.2, 0.6
+    # Cap rate-of-change to reduce spikiness
     max_step = 0.05
 
     start_time = time.time()
@@ -205,30 +251,9 @@ def run_bridge(cfg: BridgeConfig) -> None:
 
         while True:
             if cfg.simulate:
-                tp9, af7, af8, tp10, sim_t0 = _simulate_window(fs, hop_size, sim_t0)
-                tp9_buf.extend(tp9.tolist())
-                af7_buf.extend(af7.tolist())
-                af8_buf.extend(af8.tolist())
-                tp10_buf.extend(tp10.tolist())
-                if cfg.enable_osc and cfg.send_raw_eeg and tp9.size > 0:
-                    _send_osc(osc_client, '/muse/eeg', tp9[-1], af7[-1], af8[-1], tp10[-1])
-                time.sleep(cfg.hop_seconds)
+                sim_t0 = _simulate_step(cfg, fs, hop_size, sim_t0, tp9_buf, af7_buf, af8_buf, tp10_buf, osc_client)
             else:
-                sample, ts = inlet.pull_sample(timeout=5.0)  # type: ignore[attr-defined]
-                if sample is None:
-                    continue
-                ch0 = sample[0] if len(sample) >= 1 else 0.0
-                ch1 = sample[1] if len(sample) >= 2 else ch0
-                ch2 = sample[2] if len(sample) >= 3 else ch1
-                ch3 = sample[3] if len(sample) >= 4 else ch0
-
-                tp9_buf.append(ch0)
-                af7_buf.append(ch1)
-                af8_buf.append(ch2)
-                tp10_buf.append(ch3)
-
-                if cfg.enable_osc and cfg.send_raw_eeg:
-                    _send_osc(osc_client, '/muse/eeg', ch0, ch1, ch2, ch3)
+                _step(cfg, inlet, tp9_buf, af7_buf, af8_buf, tp10_buf, osc_client)
 
             now = time.time()
             if (len(tp9_buf) == window_size and len(af7_buf) == window_size and
@@ -257,6 +282,7 @@ def run_bridge(cfg: BridgeConfig) -> None:
                 gamma_abs = avg_abs(gamma_band)
 
                 total_abs = avg_abs(total_band)
+                # Avoid division-by-zero while keeping the relative scale consistent.
                 eps = 1e-9
                 delta_rel = delta_abs / (total_abs + eps)
                 theta_rel = theta_abs / (total_abs + eps)
@@ -265,6 +291,7 @@ def run_bridge(cfg: BridgeConfig) -> None:
                 gamma_rel = gamma_abs / (total_abs + eps)
 
                 # Optional Relaxation Index derivation (kept for UDP Unity channel)
+                # TODO: Remove this, I keep the scripts separate now. 
                 ri = alpha_rel - beta_rel
                 if math.isnan(ri_ema):
                     ri_ema = ri
@@ -276,9 +303,12 @@ def run_bridge(cfg: BridgeConfig) -> None:
                 if base_linear <= focus_low or base_linear >= focus_high:
                     desired_scaled = base_linear
                 else:
+                    # Apply cosine ease inside the focus window to expand mid-range
+                    # resolution where the UI needs more sensitivity.
                     ri_norm = (base_linear - focus_low) / denom
                     desired_scaled = 0.5 - 0.5 * math.cos(math.pi * ri_norm)
                 ri_scaled_raw = max(0.0, min(1.0, desired_scaled))
+                # Slew limiting: softly bound the per-update change to avoid flicker.
                 delta_val = ri_scaled_raw - last_ri_scaled
                 if delta_val > max_step:
                     ri_scaled = last_ri_scaled + max_step
@@ -303,7 +333,7 @@ def run_bridge(cfg: BridgeConfig) -> None:
                     _send_osc(osc_client, '/muse/elements/beta_absolute', beta_abs)
                     _send_osc(osc_client, '/muse/elements/gamma_absolute', gamma_abs)
 
-                # UDP JSON for Unity (unchanged)
+                # UDP JSON for Unity TODO: REMOVE! 
                 if cfg.enable_udp and udp_sock and udp_addr:
                     packet = {
                         't': time.time(),
@@ -325,7 +355,7 @@ def run_bridge(cfg: BridgeConfig) -> None:
                         f"{ri_ema:.6f}",
                         f"{ri_scaled:.6f}",
                     ])
-                    csv_file.flush()  # type: ignore[union-attr]
+                    csv_file.flush()
 
                 print(
                     f"REL: d={delta_rel:.3f} t={theta_rel:.3f} a={alpha_rel:.3f} b={beta_rel:.3f} g={gamma_rel:.3f}  "
@@ -349,6 +379,10 @@ def run_bridge(cfg: BridgeConfig) -> None:
 
 
 def main():
+    """CLI entrypoint to run the bridge from the command line.
+
+    Parses arguments into a `BridgeConfig` and invokes `run_bridge`.
+    """
     parser = argparse.ArgumentParser(description='Muse 2 LSL → OSC(/muse/...) + UDP live EEG bridge')
     parser.add_argument('--osc-ip', default='127.0.0.1')
     parser.add_argument('--osc-port', type=int, default=7000)

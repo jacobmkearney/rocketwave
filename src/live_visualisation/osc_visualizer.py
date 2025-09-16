@@ -27,7 +27,6 @@ class OSCDataPlotter:
         self.ip = ip
         self.port = port
 
-        # address -> deque[(ts, [args...])]
         self.buffers: Dict[str, Deque[Tuple[datetime, Tuple[float, ...]]]] = defaultdict(lambda: deque(maxlen=10000))
         self.addresses: List[str] = []
         self.current_address: str = ''
